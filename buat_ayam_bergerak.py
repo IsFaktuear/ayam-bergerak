@@ -1,7 +1,7 @@
 # buat_ayam_bergerak.py
 # Versi video (MP4) dari proyek "Ayam Bergerak - Si Jago Bangun Pagi".
-# Frame digambar satu per satu dengan Pillow, suara kokok dibuat dengan NumPy,
-# lalu keduanya digabung menjadi MP4 memakai FFmpeg.
+# Frame digambar satu per satu dengan Pillow, suara memakai rekaman ayam asli
+# (file MP3) yang dicampur ke trek audio dengan NumPy, lalu digabung jadi MP4 oleh FFmpeg.
 #
 # Cara pakai:
 #   pip install pillow numpy
@@ -163,36 +163,34 @@ def gambar_ayam(img, f):
 
 
 # --------------------------------------------------------------- suara
+# Rekaman ayam asli, domain publik dari Wikimedia Commons (direkam alys, PDSounds):
+#   kokok.mp3 - potongan "Medium rooster crowing"
+#   kotek.mp3 - potongan "Hen announcing shes lain an egg"
 SR = 44100
 
 
-def _saw(ph):
-    return 2 * (ph - np.floor(ph + 0.5))
+def _muat_mp3(nama):
+    """Dekode MP3 di folder ini jadi array float mono 44100 Hz lewat FFmpeg."""
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", os.path.join(OUT_DIR, nama),
+         "-ac", "1", "-ar", str(SR), "-f", "f32le", "-"],
+        check=True, capture_output=True).stdout
+    return np.frombuffer(raw, dtype=np.float32).copy()
 
 
-def _nada(buf, t0, dur, f0, f1, vol, bentuk="saw"):
-    n = int(dur * SR)
+def _tambah(buf, t0, suara, vol=1.0, potong=None):
+    if potong:
+        suara = suara[:int(potong * SR)]
     mulai = int(t0 * SR)
-    if mulai + n > len(buf):
-        n = len(buf) - mulai
-    tt = np.arange(n) / SR
-    freq = f0 * (f1 / f0) ** (tt / dur)
-    ph = np.cumsum(freq) / SR
-    gelombang = _saw(ph) if bentuk == "saw" else np.sign(np.sin(2 * np.pi * ph))
-    env = np.minimum(1, np.minimum(tt / 0.03, (dur - tt) / 0.06 + 0.02))
-    buf[mulai:mulai + n] += gelombang * env * vol
+    n = min(len(suara), len(buf) - mulai)
+    if n > 0:
+        buf[mulai:mulai + n] += suara[:n] * vol
 
 
 def buat_suara():
     buf = np.zeros(DUR * SR)
-    for i in range(5):  # kotek saat mematuk (5,4 - 6,2 dtk)
-        _nada(buf, 5.4 + i * 0.16, 0.09, 340, 170, 0.30, "square")
-    t = 7.6  # kokok: ku-ku-ru-yuuuk
-    _nada(buf, t, 0.14, 620, 700, 0.42)
-    _nada(buf, t + 0.17, 0.14, 600, 680, 0.42)
-    _nada(buf, t + 0.34, 0.20, 760, 980, 0.50)
-    _nada(buf, t + 0.57, 0.85, 1180, 480, 0.55)
-    _nada(buf, t + 0.57, 0.85, 590, 240, 0.13, "square")
+    _tambah(buf, 5.2, _muat_mp3("kotek.mp3"), 0.9, potong=1.8)  # kotek saat mematuk
+    _tambah(buf, 7.0, _muat_mp3("kokok.mp3"), 1.0)              # kokok penutup
     buf = np.clip(buf, -1, 1)
     with wave.open(WAV, "wb") as w:
         w.setnchannels(1)

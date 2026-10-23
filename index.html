@@ -194,12 +194,12 @@
     <div>
       <h1>Si Jago <em>Bangun Pagi</em>,<br>Seekor Ayam yang Bisa Bergerak</h1>
       <p>Ini ayam jantan peliharaanku di halaman web ini. Dia berjalan-jalan sendiri,
-      bisa disuruh berkokok, berkotek, dan mematuk jagung. Semua gambar, suara, dan
-      geraknya dibuat dengan coding, tanpa gambar atau suara dari luar.</p>
+      bisa disuruh berkokok, berkotek, dan mematuk jagung. Gambar dan geraknya dibuat
+      dengan coding, sedangkan suaranya rekaman ayam asli.</p>
     </div>
     <div class="chips">
       <div class="chip"><b>SVG</b>Gambar</div>
-      <div class="chip kuning"><b>Web Audio</b>Suara</div>
+      <div class="chip kuning"><b>MP3 Asli</b>Suara</div>
       <div class="chip merah"><b>CSS + JS</b>Gerak</div>
     </div>
   </div>
@@ -322,12 +322,14 @@
     <div class="langkah">
       <div class="no">2</div>
       <div>
-        <h3>Suara, Disintesis Web Audio 🔊</h3>
-        <p>Tidak ada file MP3 di halaman ini. Kokok "ku-ku-ru-yuuuk" dan kotek "kotok-kotok"
-        dirangkai langsung di browser memakai Web Audio API: osilator yang frekuensinya
-        dinaik-turunkan mengikuti pola suara ayam, dibentuk dengan filter dan kurva volume.
-        Keluaran suaranya juga dilewatkan ke AnalyserNode, makanya batang equalizer kecil
-        di pojok kiri panggung dan denyut matahari bergerak mengikuti keras-lemahnya suara.</p>
+        <h3>Suara, Rekaman Ayam Asli 🔊</h3>
+        <p>Kokok dan koteknya adalah rekaman ayam betulan, bukan suara buatan. File
+        kokok.mp3 dan kotek.mp3 diambil dari Wikimedia Commons (domain publik, direkam
+        oleh alys via PDSounds), dipotong dari rekaman yang lebih panjang lalu volumenya
+        dinormalkan supaya pas sekali klik. Di halaman ini rekaman diputar memakai HTML5
+        Audio dan keluarannya dilewatkan ke AnalyserNode dari Web Audio API, makanya batang
+        equalizer kecil di pojok kiri panggung dan denyut matahari bergerak mengikuti
+        keras-lemahnya suara rekamannya.</p>
       </div>
     </div>
 
@@ -351,9 +353,10 @@
       <video controls preload="metadata" src="ayam_bergerak.mp4"></video>
       <div>
         <p>Adegan yang sama dirender ulang menjadi video MP4 oleh program Python terpisah.
-        Setiap frame digambar satu-satu dengan Pillow (total 240 frame), suaranya dibuat
-        dengan NumPy, lalu FFmpeg menggabungkan gambar dan suara menjadi satu file video
-        berdurasi 10 detik: berjalan, mematuk sambil berkotek, lalu berkokok.</p>
+        Setiap frame digambar satu-satu dengan Pillow (total 240 frame), lalu FFmpeg
+        menggabungkan gambar dan suara menjadi satu file video berdurasi 10 detik:
+        berjalan, mematuk sambil berkotek, lalu berkokok. Suara di videonya memakai
+        rekaman ayam asli yang sama dengan di halaman web ini.</p>
         <pre>pip install pillow numpy
 python buat_ayam_bergerak.py</pre>
       </div>
@@ -403,7 +406,9 @@ python buat_ayam_bergerak.py</pre>
     if(master) master.gain.value = volIn.value / 100;
   });
 
-  /* ---------- Audio: Web Audio API ---------- */
+  /* ---------- Audio: rekaman ayam asli (HTML5 Audio + AnalyserNode) ---------- */
+  var kokokEl = new Audio('kokok.mp3'); kokokEl.preload = 'auto';
+  var kotekEl = new Audio('kotek.mp3'); kotekEl.preload = 'auto';
   var AC = window.AudioContext || window.webkitAudioContext;
   var ctx = null, master = null, analyser = null, freqData = null;
   function audio(){
@@ -412,37 +417,21 @@ python buat_ayam_bergerak.py</pre>
       master = ctx.createGain(); master.gain.value = volIn.value / 100;
       analyser = ctx.createAnalyser(); analyser.fftSize = 64;
       freqData = new Uint8Array(analyser.frequencyBinCount);
+      ctx.createMediaElementSource(kokokEl).connect(master);
+      ctx.createMediaElementSource(kotekEl).connect(master);
       master.connect(analyser); analyser.connect(ctx.destination);
       drawEq();
     }
     if(ctx.state === 'suspended') ctx.resume();
     return ctx;
   }
-  function tone(t0, dur, f0, f1, type, vol){
-    var o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter();
-    o.type = type || 'sawtooth';
-    o.frequency.setValueAtTime(f0, t0);
-    o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t0 + dur);
-    fl.type = 'bandpass'; fl.frequency.value = 1100; fl.Q.value = 1.1;
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.03);
-    g.gain.setValueAtTime(vol, t0 + dur - 0.06);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(fl); fl.connect(g); g.connect(master);
-    o.start(t0); o.stop(t0 + dur + 0.05);
+  function putar(el){
+    audio();
+    try{ el.pause(); el.currentTime = 0; }catch(e){}
+    var p = el.play(); if(p && p.catch) p.catch(function(){});
   }
-  function crowSound(){
-    audio(); var t = ctx.currentTime + 0.02;
-    tone(t, 0.14, 620, 700, 'sawtooth', 0.50);
-    tone(t + 0.17, 0.14, 600, 680, 'sawtooth', 0.50);
-    tone(t + 0.34, 0.20, 760, 980, 'sawtooth', 0.60);
-    tone(t + 0.57, 0.75, 1180, 480, 'sawtooth', 0.68);
-    tone(t + 0.57, 0.75, 590, 240, 'square', 0.16);
-  }
-  function cluckSound(){
-    audio(); var t = ctx.currentTime + 0.02;
-    for(var i = 0; i < 5; i++) tone(t + i * 0.16, 0.09, 340, 170, 'square', 0.42);
-  }
+  function crowSound(){ putar(kokokEl); }
+  function cluckSound(){ putar(kotekEl); }
 
   /* ---------- Equalizer ---------- */
   var bars = document.querySelectorAll('#eq span');
@@ -463,7 +452,7 @@ python buat_ayam_bergerak.py</pre>
     bubble.textContent = 'KUKURUYUK!'; bubble.classList.remove('cluck');
     setStatus('berkokok keras, menandai wilayahnya');
     crowSound(); catat('Si Jago berkokok');
-    setTimeout(function(){ stage.classList.remove('crowing'); busy = false; statusJalan(); }, 1750);
+    setTimeout(function(){ stage.classList.remove('crowing'); busy = false; statusJalan(); }, 3200);
   }
   function cluck(){
     if(busy) return; busy = true;
@@ -471,7 +460,7 @@ python buat_ayam_bergerak.py</pre>
     bubble.textContent = 'Kotok... kotok...'; bubble.classList.add('cluck');
     setStatus('berkotek');
     cluckSound(); catat('Si Jago berkotek');
-    setTimeout(function(){ stage.classList.remove('clucking'); bubble.classList.remove('cluck'); busy = false; statusJalan(); }, 950);
+    setTimeout(function(){ stage.classList.remove('clucking'); bubble.classList.remove('cluck'); busy = false; statusJalan(); }, 2600);
   }
   function peck(){
     if(busy) return; busy = true;
